@@ -40,6 +40,8 @@ from functools import partial
 import itertools
 from operator import attrgetter
 import pandas as pd
+import warnings
+import types
 
 
 class DataCollector:
@@ -114,8 +116,15 @@ class DataCollector:
         """
         if type(reporter) is str:
             reporter = partial(self._getattr, reporter)
+        '''
+        if isinstance(reporter, types.LambdaType):
+            warnings.warn("Lambda functions cannot be used in BatchRunnerMP.\n "
+                          "If you want to use BathrunnnerMP pass your Model reporter as \n"
+                          "{reporter: [function, [arguments]]}")
+        '''
         self.model_reporters[name] = reporter
         self.model_vars[name] = []
+
 
     def _new_agent_reporter(self, name, reporter):
         """ Add a new agent-level reporter to collect.
@@ -164,7 +173,13 @@ class DataCollector:
         """ Collect all the data for the given model object. """
         if self.model_reporters:
             for var, reporter in self.model_reporters.items():
-                self.model_vars[var].append(reporter(model))
+                if isinstance(reporter, types.LambdaType):
+                    self.model_vars[var].append(reporter(model))
+                else:
+                    try:
+                        self.model_vars[var].append(reporter[0](*reporter[1]))
+                    except:
+                        raise Exception("Model reporters should be of form {reporter: [function, [arguments]]}")
 
         if self.agent_reporters:
             agent_records = self._record_agents(model)
